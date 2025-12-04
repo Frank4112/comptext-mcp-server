@@ -6,22 +6,20 @@ labels: enhancement
 assignees: ''
 ---
 
-## Feature Description
-A clear and concise description of the feature you'd like to see.
+**Is your feature request related to a problem? Please describe.**
+A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
 
-## Problem It Solves
-Describe the problem this feature would solve. Ex. I'm always frustrated when [...]
+**Describe the solution you'd like**
+A clear and concise description of what you want to happen.
 
-## Proposed Solution
-Describe the solution you'd like.
+**Describe alternatives you've considered**
+A clear and concise description of any alternative solutions or features you've considered.
 
-## Alternatives Considered
-Describe any alternative solutions or features you've considered.
+**Use Case**
+Describe the use case and how this feature would benefit users.
 
-## Additional Context
-Add any other context, mockups, or screenshots about the feature request here.
+**Additional context**
+Add any other context or screenshots about the feature request here.
 
-## Would you be willing to contribute this feature?
-- [ ] Yes, I can submit a PR
-- [ ] No, but I can help test
-- [ ] No, just suggesting
+**Proposed Implementation (optional)**
+If you have ideas about how this could be implemented, please share them here.
