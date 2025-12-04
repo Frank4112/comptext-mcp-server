@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  comptext-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.rest
+    container_name: comptext-api
+    ports:
+      - "8000:8000"
+    environment:
+      - NOTION_API_TOKEN=${NOTION_API_TOKEN}
+      - COMPTEXT_DATABASE_ID=0e038c9b52c5466694dbac288280dd93
+      - LOG_LEVEL=INFO
+      - HOST=0.0.0.0
+      - PORT=8000
+    restart: unless-stopped
