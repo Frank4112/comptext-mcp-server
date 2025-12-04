@@ -1,0 +1,9 @@
+# Core MCP Dependencies
+mcp>=1.0.0
+
+# Notion API
+notion-client>=2.2.1
+
+# Utilities
+python-dotenv>=1.0.0
+rich>=13.7.0

@@ -1,0 +1,6 @@
+# Include core requirements
+-r requirements.txt
+
+# REST API Dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
