@@ -1,42 +1,47 @@
 import os
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-import uvicorn
 from fastapi import FastAPI
+import uvicorn
 
-# MCP Server initialisieren
-mcp_server = Server("comptext-mcp")
+# FastAPI App initialisieren
+app = FastAPI(title="CompText MCP Server", version="3.5.2")
 
-# CompText Validierungs-Tool
-@mcp_server.tool()
-async def validate_comptext(code: str) -> dict:
-    """Validiert CompText DSL Syntax."""
+@app.get("/")
+async def root():
+    """Server Status Endpoint"""
+    return {
+        "status": "CompText MCP Server running",
+        "version": "3.5.2",
+        "endpoints": {
+            "health": "/health",
+            "validate": "/validate",
+            "parse": "/parse"
+        }
+    }
+
+@app.get("/health")
+async def health():
+    """Health Check Endpoint"""
+    return {"status": "healthy"}
+
+@app.post("/validate")
+async def validate_comptext(code: str):
+    """Validiert CompText DSL Syntax"""
     # Hier deine Validierungslogik
     return {
         "valid": True,
         "syntax_version": "3.5.2",
-        "modules_used": ["A", "B", "M"]
+        "modules_used": ["A", "B", "M"],
+        "code": code
     }
 
-# CompText Parser-Tool
-@mcp_server.tool()
-async def parse_comptext(code: str) -> dict:
-    """Parsed CompText zu natürlicher Sprache."""
+@app.post("/parse")
+async def parse_comptext(code: str):
+    """Parsed CompText zu natürlicher Sprache"""
     return {
         "parsed": f"Parsed version of: {code}",
-        "tokens_saved": 42
+        "tokens_saved": 42,
+        "original": code
     }
-
-# FastAPI Wrapper für HTTP
-app = FastAPI()
-
-@app.get("/")
-async def root():
-    return {"status": "CompText MCP Server running", "version": "3.5.2"}
-
-@app.get("/health")
-async def health():
-    return {"status": "healthy"}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
