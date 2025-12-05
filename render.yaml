@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: comptext-mcp
+    env: python
+    region: frankfurt # EU-Region für niedrige Latenz
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python mcp_server.py"
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    healthCheckPath: /health
