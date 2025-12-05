@@ -1,9 +1,4 @@
-# Core MCP Dependencies
 mcp>=1.0.0
-
-# Notion API
-notion-client>=2.2.1
-
-# Utilities
-python-dotenv>=1.0.0
-rich>=13.7.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
