@@ -1,5 +1,5 @@
 """REST API Wrapper für CompText MCP Server"""
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -8,6 +8,9 @@ import logging
 import os
 import sys
 from dotenv import load_dotenv
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 load_dotenv()
 
@@ -31,11 +34,18 @@ from comptext_mcp.utils import validate_page_id, validate_query_string
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(
     title="CompText Codex API",
-    description="REST API für CompText MCP Server",
+    description="REST API für CompText MCP Server mit Rate Limiting",
     version="1.0.0"
 )
+
+# Add rate limit handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,7 +57,8 @@ app.add_middleware(
 
 
 @app.get("/")
-async def root():
+@limiter.limit("60/minute")
+async def root(request: Request):
     return {
         "name": "CompText Codex API",
         "version": "1.0.0",
@@ -66,7 +77,8 @@ async def root():
 
 
 @app.get("/health")
-async def health_check():
+@limiter.limit("120/minute")
+async def health_check(request: Request):
     try:
         modules = get_all_modules()
         return {
@@ -83,7 +95,8 @@ async def health_check():
 
 
 @app.get("/api/modules")
-async def list_modules():
+@limiter.limit("30/minute")
+async def list_modules(request: Request):
     try:
         modules = get_all_modules()
         by_module = {}
@@ -111,7 +124,8 @@ async def list_modules():
 
 
 @app.get("/api/modules/{module}")
-async def get_module(module: str):
+@limiter.limit("30/minute")
+async def get_module(request: Request, module: str):
     try:
         if module in MODULE_MAP:
             module = MODULE_MAP[module]
@@ -127,7 +141,9 @@ async def get_module(module: str):
 
 
 @app.get("/api/search")
+@limiter.limit("20/minute")
 async def search(
+    request: Request,
     query: str = Query(..., description="Suchbegriff"),
     max_results: int = Query(20, ge=1, le=MAX_SEARCH_RESULTS)
 ):
@@ -146,7 +162,8 @@ async def search(
 
 
 @app.get("/api/command/{page_id}")
-async def get_command(page_id: str):
+@limiter.limit("30/minute")
+async def get_command(request: Request, page_id: str):
     try:
         validated_id = validate_page_id(page_id)
         page_info = get_page_by_id(validated_id)
@@ -163,7 +180,8 @@ async def get_command(page_id: str):
 
 
 @app.get("/api/tags/{tag}")
-async def get_by_tag(tag: str):
+@limiter.limit("30/minute")
+async def get_by_tag(request: Request, tag: str):
     try:
         results = get_modules_by_tag(tag)
         return {
@@ -176,7 +194,8 @@ async def get_by_tag(tag: str):
 
 
 @app.get("/api/types/{typ}")
-async def get_by_type(typ: str):
+@limiter.limit("30/minute")
+async def get_by_type(request: Request, typ: str):
     try:
         results = get_modules_by_type(typ)
         return {
@@ -189,7 +208,8 @@ async def get_by_type(typ: str):
 
 
 @app.get("/api/statistics")
-async def get_statistics():
+@limiter.limit("30/minute")
+async def get_statistics(request: Request):
     try:
         modules = get_all_modules()
         by_module = {}
@@ -219,7 +239,8 @@ async def get_statistics():
 
 
 @app.post("/api/cache/clear")
-async def clear_cache_endpoint():
+@limiter.limit("5/minute")
+async def clear_cache_endpoint(request: Request):
     try:
         clear_cache()
         return {"status": "success", "message": "Cache cleared"}
