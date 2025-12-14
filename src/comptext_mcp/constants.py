@@ -14,7 +14,7 @@ MODULE_MAP = {
     "J": "Modul J: DevOps & Deployment",
     "K": "Modul K: Frontend & UI",
     "L": "Modul L: Data Pipelines & ETL",
-    "M": "Modul M: MCP Integration"
+    "M": "Modul M: MCP Integration",
 }
 
 # API Configuration

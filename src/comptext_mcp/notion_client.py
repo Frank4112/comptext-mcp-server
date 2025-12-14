@@ -1,19 +1,14 @@
 """Notion API Client für CompText MCP-Server - Production Ready"""
+
 from notion_client import Client
 from notion_client.errors import APIResponseError
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any
 import os
 import logging
 import time
 from functools import lru_cache, wraps
 
-from .constants import (
-    CACHE_SIZE,
-    DEFAULT_DATABASE_ID,
-    MAX_RETRIES,
-    RETRY_DELAY,
-    BACKOFF_FACTOR
-)
+from .constants import CACHE_SIZE, DEFAULT_DATABASE_ID, MAX_RETRIES, RETRY_DELAY, BACKOFF_FACTOR
 from .utils import validate_page_id, validate_query_string, sanitize_text_output
 
 # Logging Setup
@@ -23,20 +18,25 @@ logger = logging.getLogger(__name__)
 NOTION_TOKEN = os.getenv("NOTION_API_TOKEN")
 CODEX_DB_ID = os.getenv("COMPTEXT_DATABASE_ID", DEFAULT_DATABASE_ID)
 
-if not NOTION_TOKEN:
-    raise ValueError("NOTION_API_TOKEN environment variable is required")
-
-# Initialize Notion Client
-notion = Client(auth=NOTION_TOKEN)
+# Initialize Notion Client (only if token is available)
+# This allows tests to run with mocked clients
+if NOTION_TOKEN:
+    notion = Client(auth=NOTION_TOKEN)
+else:
+    # For testing without credentials - will be mocked
+    notion = None
+    logger.warning("NOTION_API_TOKEN not set - notion client not initialized")
 
 
 class NotionClientError(Exception):
     """Custom exception for Notion client errors"""
+
     pass
 
 
 def retry_on_failure(max_retries: int = MAX_RETRIES):
     """Decorator to retry function on failure with exponential backoff"""
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -49,7 +49,7 @@ def retry_on_failure(max_retries: int = MAX_RETRIES):
                     if retries >= max_retries:
                         logger.error(f"Max retries reached for {func.__name__}: {e}")
                         raise NotionClientError(f"Failed after {max_retries} retries: {e}")
-                    
+
                     wait_time = RETRY_DELAY * (BACKOFF_FACTOR ** (retries - 1))
                     logger.warning(f"Retry {retries}/{max_retries} for {func.__name__} after {wait_time}s: {e}")
                     time.sleep(wait_time)
@@ -57,7 +57,9 @@ def retry_on_failure(max_retries: int = MAX_RETRIES):
                     logger.error(f"Unexpected error in {func.__name__}: {e}")
                     raise NotionClientError(f"Unexpected error: {e}")
             return None
+
         return wrapper
+
     return decorator
 
 
@@ -72,18 +74,18 @@ def _extract_text_from_rich_text(rich_text: List[Dict]) -> str:
 def _get_property_value(page: Dict, prop_name: str, prop_type: str) -> Any:
     """
     Extract property value based on type from a Notion page.
-    
+
     Args:
         page: Notion page object
         prop_name: Name of the property to extract
         prop_type: Type of the property (title, rich_text, select, multi_select, url)
-        
+
     Returns:
         Extracted value in appropriate Python type, or None if not found/error
     """
     try:
         prop = page["properties"].get(prop_name, {})
-        
+
         if prop_type == "title":
             return _extract_text_from_rich_text(prop.get("title", []))
         elif prop_type == "rich_text":
@@ -105,10 +107,10 @@ def _get_property_value(page: Dict, prop_name: str, prop_type: str) -> Any:
 def parse_page(page: Dict) -> Dict[str, Any]:
     """
     Parse Notion page to CompText format.
-    
+
     Args:
         page: Raw Notion page object
-        
+
     Returns:
         Dictionary with standardized CompText page structure containing:
         - id: Notion page ID
@@ -130,22 +132,22 @@ def parse_page(page: Dict) -> Dict[str, Any]:
         "typ": _get_property_value(page, "Typ", "select"),
         "tags": _get_property_value(page, "Tags", "multi_select"),
         "created_time": page.get("created_time"),
-        "last_edited_time": page.get("last_edited_time")
+        "last_edited_time": page.get("last_edited_time"),
     }
 
 
 def _block_to_text(block: Dict) -> str:
     """
     Convert a single Notion block to markdown text.
-    
+
     Args:
         block: Notion block object
-        
+
     Returns:
         Markdown-formatted text representation of the block
     """
     block_type = block.get("type")
-    
+
     if block_type == "paragraph":
         return _extract_text_from_rich_text(block["paragraph"].get("rich_text", []))
     elif block_type == "heading_1":
@@ -171,10 +173,10 @@ def _block_to_text(block: Dict) -> str:
 def blocks_to_text(blocks: List[Dict]) -> str:
     """
     Convert list of Notion blocks to markdown text.
-    
+
     Args:
         blocks: List of Notion block objects
-        
+
     Returns:
         Markdown-formatted text with blocks separated by double newlines
     """
@@ -186,13 +188,13 @@ def blocks_to_text(blocks: List[Dict]) -> str:
 def get_all_modules() -> List[Dict[str, Any]]:
     """
     Load all modules from CompText Codex.
-    
+
     Results are cached to improve performance. Use clear_cache() to invalidate.
     Automatically retries on Notion API failures with exponential backoff.
-    
+
     Returns:
         List of all module entries from the Codex database
-        
+
     Raises:
         NotionClientError: If all retry attempts fail
     """
@@ -204,23 +206,17 @@ def get_all_modules() -> List[Dict[str, Any]]:
 def get_module_by_name(modul_name: str) -> List[Dict[str, Any]]:
     """
     Load all entries of a specific module.
-    
+
     Args:
         modul_name: Full module name (e.g., "Modul B: Programmierung")
-        
+
     Returns:
         List of entries belonging to the specified module
-        
+
     Raises:
         NotionClientError: If all retry attempts fail
     """
-    response = notion.databases.query(
-        database_id=CODEX_DB_ID,
-        filter={
-            "property": "Modul",
-            "select": {"equals": modul_name}
-        }
-    )
+    response = notion.databases.query(database_id=CODEX_DB_ID, filter={"property": "Modul", "select": {"equals": modul_name}})
     return [parse_page(page) for page in response["results"]]
 
 
@@ -228,13 +224,13 @@ def get_module_by_name(modul_name: str) -> List[Dict[str, Any]]:
 def get_page_content(page_id: str) -> str:
     """
     Load full content of a Notion page.
-    
+
     Args:
         page_id: Notion page ID (with or without dashes)
-        
+
     Returns:
         Markdown-formatted page content
-        
+
     Raises:
         ValueError: If page ID format is invalid
         NotionClientError: If all retry attempts fail
@@ -247,14 +243,14 @@ def get_page_content(page_id: str) -> str:
 def search_codex(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
     """
     Search in CompText Codex by title, description, or tags.
-    
+
     Args:
         query: Search query string (max 200 characters)
         max_results: Maximum number of results to return (default: 20)
-        
+
     Returns:
         List of matching entries, limited to max_results
-        
+
     Raises:
         ValueError: If query is invalid or too long
         NotionClientError: If fetching modules fails
@@ -262,19 +258,19 @@ def search_codex(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
     validated_query = validate_query_string(query)
     all_modules = get_all_modules()
     query_lower = validated_query.lower()
-    
+
     results = []
     for module in all_modules:
         titel = (module.get("titel") or "").lower()
         beschreibung = (module.get("beschreibung") or "").lower()
         tags = " ".join(module.get("tags", [])).lower()
-        
+
         if query_lower in titel or query_lower in beschreibung or query_lower in tags:
             results.append(module)
-            
+
             if len(results) >= max_results:
                 break
-    
+
     return results
 
 
@@ -282,13 +278,13 @@ def search_codex(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
 def get_page_by_id(page_id: str) -> Dict[str, Any]:
     """
     Get page information by Notion page ID.
-    
+
     Args:
         page_id: Notion page ID (with or without dashes)
-        
+
     Returns:
         Parsed page information dictionary
-        
+
     Raises:
         ValueError: If page ID format is invalid
         NotionClientError: If all retry attempts fail
@@ -302,23 +298,17 @@ def get_page_by_id(page_id: str) -> Dict[str, Any]:
 def get_modules_by_tag(tag: str) -> List[Dict[str, Any]]:
     """
     Filter modules by tag.
-    
+
     Args:
         tag: Tag name to filter by (e.g., "Core", "Erweitert")
-        
+
     Returns:
         List of entries containing the specified tag
-        
+
     Raises:
         NotionClientError: If all retry attempts fail
     """
-    response = notion.databases.query(
-        database_id=CODEX_DB_ID,
-        filter={
-            "property": "Tags",
-            "multi_select": {"contains": tag}
-        }
-    )
+    response = notion.databases.query(database_id=CODEX_DB_ID, filter={"property": "Tags", "multi_select": {"contains": tag}})
     return [parse_page(page) for page in response["results"]]
 
 
@@ -326,30 +316,24 @@ def get_modules_by_tag(tag: str) -> List[Dict[str, Any]]:
 def get_modules_by_type(typ: str) -> List[Dict[str, Any]]:
     """
     Filter modules by type.
-    
+
     Args:
         typ: Type to filter by (e.g., "Dokumentation", "Beispiel")
-        
+
     Returns:
         List of entries of the specified type
-        
+
     Raises:
         NotionClientError: If all retry attempts fail
     """
-    response = notion.databases.query(
-        database_id=CODEX_DB_ID,
-        filter={
-            "property": "Typ",
-            "select": {"equals": typ}
-        }
-    )
+    response = notion.databases.query(database_id=CODEX_DB_ID, filter={"property": "Typ", "select": {"equals": typ}})
     return [parse_page(page) for page in response["results"]]
 
 
 def clear_cache():
     """
     Clear the LRU cache for get_all_modules.
-    
+
     Use this to force a refresh of cached data from Notion.
     """
     get_all_modules.cache_clear()
