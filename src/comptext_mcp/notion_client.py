@@ -4,14 +4,24 @@ from notion_client.errors import APIResponseError
 from typing import Optional, List, Dict, Any
 import os
 import logging
-from functools import lru_cache
+import time
+from functools import lru_cache, wraps
+
+from .constants import (
+    CACHE_SIZE,
+    DEFAULT_DATABASE_ID,
+    MAX_RETRIES,
+    RETRY_DELAY,
+    BACKOFF_FACTOR
+)
+from .utils import validate_page_id, validate_query_string, sanitize_text_output
 
 # Logging Setup
 logger = logging.getLogger(__name__)
 
 # Configuration
 NOTION_TOKEN = os.getenv("NOTION_API_TOKEN")
-CODEX_DB_ID = os.getenv("COMPTEXT_DATABASE_ID", "0e038c9b52c5466694dbac288280dd93")
+CODEX_DB_ID = os.getenv("COMPTEXT_DATABASE_ID", DEFAULT_DATABASE_ID)
 
 if not NOTION_TOKEN:
     raise ValueError("NOTION_API_TOKEN environment variable is required")
@@ -25,11 +35,38 @@ class NotionClientError(Exception):
     pass
 
 
+def retry_on_failure(max_retries: int = MAX_RETRIES):
+    """Decorator to retry function on failure with exponential backoff"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            retries = 0
+            while retries < max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except APIResponseError as e:
+                    retries += 1
+                    if retries >= max_retries:
+                        logger.error(f"Max retries reached for {func.__name__}: {e}")
+                        raise NotionClientError(f"Failed after {max_retries} retries: {e}")
+                    
+                    wait_time = RETRY_DELAY * (BACKOFF_FACTOR ** (retries - 1))
+                    logger.warning(f"Retry {retries}/{max_retries} for {func.__name__} after {wait_time}s: {e}")
+                    time.sleep(wait_time)
+                except Exception as e:
+                    logger.error(f"Unexpected error in {func.__name__}: {e}")
+                    raise NotionClientError(f"Unexpected error: {e}")
+            return None
+        return wrapper
+    return decorator
+
+
 def _extract_text_from_rich_text(rich_text: List[Dict]) -> str:
     """Extract plain text from Notion rich text objects"""
     if not rich_text:
         return ""
-    return "".join([rt.get("plain_text", "") for rt in rich_text])
+    text = "".join([rt.get("plain_text", "") for rt in rich_text])
+    return sanitize_text_output(text)
 
 
 def _get_property_value(page: Dict, prop_name: str, prop_type: str) -> Any:
@@ -101,107 +138,88 @@ def blocks_to_text(blocks: List[Dict]) -> str:
     return "\n\n".join([_block_to_text(block) for block in blocks if _block_to_text(block)])
 
 
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=CACHE_SIZE)
+@retry_on_failure()
 def get_all_modules() -> List[Dict[str, Any]]:
-    """Load all modules from CompText Codex (cached)"""
-    try:
-        response = notion.databases.query(database_id=CODEX_DB_ID)
-        return [parse_page(page) for page in response["results"]]
-    except APIResponseError as e:
-        logger.error(f"Error fetching all modules: {e}")
-        raise NotionClientError(f"Failed to fetch modules: {e}")
+    """Load all modules from CompText Codex (cached with retry logic)"""
+    response = notion.databases.query(database_id=CODEX_DB_ID)
+    return [parse_page(page) for page in response["results"]]
 
 
+@retry_on_failure()
 def get_module_by_name(modul_name: str) -> List[Dict[str, Any]]:
     """Load all entries of a specific module"""
-    try:
-        response = notion.databases.query(
-            database_id=CODEX_DB_ID,
-            filter={
-                "property": "Modul",
-                "select": {"equals": modul_name}
-            }
-        )
-        return [parse_page(page) for page in response["results"]]
-    except APIResponseError as e:
-        logger.error(f"Error fetching module {modul_name}: {e}")
-        raise NotionClientError(f"Failed to fetch module: {e}")
+    response = notion.databases.query(
+        database_id=CODEX_DB_ID,
+        filter={
+            "property": "Modul",
+            "select": {"equals": modul_name}
+        }
+    )
+    return [parse_page(page) for page in response["results"]]
 
 
+@retry_on_failure()
 def get_page_content(page_id: str) -> str:
     """Load full content of a page"""
-    try:
-        blocks = notion.blocks.children.list(block_id=page_id)
-        return blocks_to_text(blocks["results"])
-    except APIResponseError as e:
-        logger.error(f"Error fetching page content {page_id}: {e}")
-        raise NotionClientError(f"Failed to fetch page content: {e}")
+    validated_id = validate_page_id(page_id)
+    blocks = notion.blocks.children.list(block_id=validated_id)
+    return blocks_to_text(blocks["results"])
 
 
 def search_codex(query: str, max_results: int = 20) -> List[Dict[str, Any]]:
     """Search in CompText Codex"""
-    try:
-        all_modules = get_all_modules()
-        query_lower = query.lower()
+    validated_query = validate_query_string(query)
+    all_modules = get_all_modules()
+    query_lower = validated_query.lower()
+    
+    results = []
+    for module in all_modules:
+        titel = (module.get("titel") or "").lower()
+        beschreibung = (module.get("beschreibung") or "").lower()
+        tags = " ".join(module.get("tags", [])).lower()
         
-        results = []
-        for module in all_modules:
-            titel = (module.get("titel") or "").lower()
-            beschreibung = (module.get("beschreibung") or "").lower()
-            tags = " ".join(module.get("tags", [])).lower()
+        if query_lower in titel or query_lower in beschreibung or query_lower in tags:
+            results.append(module)
             
-            if query_lower in titel or query_lower in beschreibung or query_lower in tags:
-                results.append(module)
-                
-                if len(results) >= max_results:
-                    break
-        
-        return results
-    except Exception as e:
-        logger.error(f"Error searching codex: {e}")
-        raise NotionClientError(f"Failed to search codex: {e}")
+            if len(results) >= max_results:
+                break
+    
+    return results
 
 
+@retry_on_failure()
 def get_page_by_id(page_id: str) -> Dict[str, Any]:
     """Get page info by ID"""
-    try:
-        page = notion.pages.retrieve(page_id=page_id)
-        return parse_page(page)
-    except APIResponseError as e:
-        logger.error(f"Error fetching page {page_id}: {e}")
-        raise NotionClientError(f"Failed to fetch page: {e}")
+    validated_id = validate_page_id(page_id)
+    page = notion.pages.retrieve(page_id=validated_id)
+    return parse_page(page)
 
 
+@retry_on_failure()
 def get_modules_by_tag(tag: str) -> List[Dict[str, Any]]:
     """Filter modules by tag"""
-    try:
-        response = notion.databases.query(
-            database_id=CODEX_DB_ID,
-            filter={
-                "property": "Tags",
-                "multi_select": {"contains": tag}
-            }
-        )
-        return [parse_page(page) for page in response["results"]]
-    except APIResponseError as e:
-        logger.error(f"Error filtering by tag {tag}: {e}")
-        raise NotionClientError(f"Failed to filter by tag: {e}")
+    response = notion.databases.query(
+        database_id=CODEX_DB_ID,
+        filter={
+            "property": "Tags",
+            "multi_select": {"contains": tag}
+        }
+    )
+    return [parse_page(page) for page in response["results"]]
 
 
+@retry_on_failure()
 def get_modules_by_type(typ: str) -> List[Dict[str, Any]]:
     """Filter modules by type"""
-    try:
-        response = notion.databases.query(
-            database_id=CODEX_DB_ID,
-            filter={
-                "property": "Typ",
-                "select": {"equals": typ}
-            }
-        )
-        return [parse_page(page) for page in response["results"]]
-    except APIResponseError as e:
-        logger.error(f"Error filtering by type {typ}: {e}")
-        raise NotionClientError(f"Failed to filter by type: {e}")
+    response = notion.databases.query(
+        database_id=CODEX_DB_ID,
+        filter={
+            "property": "Typ",
+            "select": {"equals": typ}
+        }
+    )
+    return [parse_page(page) for page in response["results"]]
 
 
 def clear_cache():

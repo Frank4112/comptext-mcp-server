@@ -25,6 +25,8 @@ from comptext_mcp.notion_client import (
     NotionClientError,
     clear_cache
 )
+from comptext_mcp.constants import MODULE_MAP, MAX_SEARCH_RESULTS
+from comptext_mcp.utils import validate_page_id, validate_query_string
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -42,22 +44,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-MODULE_MAP = {
-    "A": "Modul A: Allgemeine Befehle",
-    "B": "Modul B: Programmierung",
-    "C": "Modul C: Visualisierung",
-    "D": "Modul D: KI-Steuerung",
-    "E": "Modul E: Datenanalyse & ML",
-    "F": "Modul F: Dokumentation",
-    "G": "Modul G: Testing & QA",
-    "H": "Modul H: Database & Data Modeling",
-    "I": "Modul I: Security & Compliance",
-    "J": "Modul J: DevOps & Deployment",
-    "K": "Modul K: Frontend & UI",
-    "L": "Modul L: Data Pipelines & ETL",
-    "M": "Modul M: MCP Integration"
-}
 
 
 @app.get("/")
@@ -143,15 +129,18 @@ async def get_module(module: str):
 @app.get("/api/search")
 async def search(
     query: str = Query(..., description="Suchbegriff"),
-    max_results: int = Query(20, ge=1, le=100)
+    max_results: int = Query(20, ge=1, le=MAX_SEARCH_RESULTS)
 ):
     try:
-        results = search_codex(query, max_results)
+        validated_query = validate_query_string(query)
+        results = search_codex(validated_query, max_results)
         return {
-            "query": query,
+            "query": validated_query,
             "count": len(results),
             "results": results
         }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except NotionClientError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
@@ -159,14 +148,16 @@ async def search(
 @app.get("/api/command/{page_id}")
 async def get_command(page_id: str):
     try:
-        page_id = page_id.replace("-", "")
-        page_info = get_page_by_id(page_id)
-        content = get_page_content(page_id)
+        validated_id = validate_page_id(page_id)
+        page_info = get_page_by_id(validated_id)
+        content = get_page_content(validated_id)
         
         return {
             "page_info": page_info,
             "content": content
         }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except NotionClientError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

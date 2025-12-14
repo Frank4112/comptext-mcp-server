@@ -16,6 +16,8 @@ from .notion_client import (
     get_modules_by_type,
     NotionClientError
 )
+from .constants import MODULE_MAP, DEFAULT_MAX_RESULTS
+from .utils import validate_page_id, validate_query_string
 
 # Load environment
 load_dotenv()
@@ -23,23 +25,6 @@ load_dotenv()
 # Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Module mapping
-MODULE_MAP = {
-    "A": "Modul A: Allgemeine Befehle",
-    "B": "Modul B: Programmierung",
-    "C": "Modul C: Visualisierung",
-    "D": "Modul D: KI-Steuerung",
-    "E": "Modul E: Datenanalyse & ML",
-    "F": "Modul F: Dokumentation",
-    "G": "Modul G: Testing & QA",
-    "H": "Modul H: Database & Data Modeling",
-    "I": "Modul I: Security & Compliance",
-    "J": "Modul J: DevOps & Deployment",
-    "K": "Modul K: Frontend & UI",
-    "L": "Modul L: Data Pipelines & ETL",
-    "M": "Modul M: MCP Integration"
-}
 
 # Initialize MCP server
 server = Server("comptext-codex")
@@ -108,7 +93,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_by_tag",
-            "description": "Filtere Einträge nach Tag (Core, Erweitert, Optimierung, Visualisierung, Analyse)",
+            description="Filtere Einträge nach Tag (Core, Erweitert, Optimierung, Visualisierung, Analyse)",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -198,14 +183,14 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent | ImageCo
             return [TextContent(type="text", text=output)]
         
         elif name == "get_command":
-            page_id = arguments.get("page_id").replace("-", "")
+            page_id = validate_page_id(arguments.get("page_id"))
             content = get_page_content(page_id)
             
             return [TextContent(type="text", text=content)]
         
         elif name == "search":
-            query = arguments.get("query")
-            max_results = arguments.get("max_results", 20)
+            query = validate_query_string(arguments.get("query"))
+            max_results = arguments.get("max_results", DEFAULT_MAX_RESULTS)
             
             results = search_codex(query, max_results)
             
@@ -298,6 +283,9 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent | ImageCo
     except NotionClientError as e:
         logger.error(f"Notion client error: {e}")
         return [TextContent(type="text", text=f"Error: {str(e)}")]
+    except ValueError as e:
+        logger.error(f"Validation error: {e}")
+        return [TextContent(type="text", text=f"Validation error: {str(e)}")]
     except Exception as e:
         logger.error(f"Unexpected error: {e}", exc_info=True)
         return [TextContent(type="text", text=f"Unexpected error: {str(e)}")]
